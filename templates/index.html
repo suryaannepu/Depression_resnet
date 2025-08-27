@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MindCheck - Depression Analysis</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { font-family: 'Poppins', sans-serif; background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); min-height: 100vh; }
+    .glass-card { background: rgba(255,255,255,0.85); backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+    .upload-area { border: 2px dashed #c084fc; transition: all .3s ease; }
+    .upload-area:hover { border-color:#9333ea; background: rgba(196,181,253,.1); }
+    .level-none { color:#10b981; }
+    .level-mild { color:#f59e0b; }
+    .level-severe { color:#ef4444; }
+    .suggestion-card { background: rgba(255,255,255,.7); border-left:4px solid #8b5cf6; transition: transform .2s; }
+    .suggestion-card:hover { transform: translateY(-2px); background: rgba(255,255,255,.8); }
+  </style>
+</head>
+<body class="py-8 px-4">
+  <div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <h1 class="text-4xl font-bold text-white">MindCheck</h1>
+      <p class="text-white opacity-90">Facial expression analysis for mental wellness</p>
+    </div>
+
+    <!-- Main Card -->
+    <div class="glass-card p-8 mb-8">
+      <h2 class="text-2xl font-semibold text-gray-800 mb-6 text-center">Upload a Photo for Analysis</h2>
+
+      <div class="upload-area p-8 rounded-lg text-center cursor-pointer mb-6" id="uploadArea">
+        <input type="file" id="imageInput" accept="image/*" class="hidden">
+        <div class="py-8">
+          <i class="fas fa-cloud-upload-alt text-4xl text-purple-500 mb-3"></i>
+          <p class="text-gray-600">Click or drag a photo to upload</p>
+          <p class="text-sm text-gray-500 mt-2">Supported formats: JPG, PNG</p>
+        </div>
+      </div>
+
+      <button id="analyzeBtn" class="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-medium transition duration-300 flex items-center justify-center">
+        <i class="fas fa-brain mr-2"></i> Analyze Expression
+      </button>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="glass-card p-8 hidden">
+      <h2 class="text-2xl font-semibold text-gray-800 mb-6 text-center">Analysis Results</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white p-4 rounded-lg shadow text-center">
+          <p class="text-gray-600">Detected Emotion</p>
+          <h3 id="emotionLabel" class="text-xl font-bold">-</h3>
+        </div>
+        <div class="bg-white p-4 rounded-lg shadow text-center">
+          <p class="text-gray-600">Depression Level</p>
+          <h3 id="depressionLevel" class="text-xl font-bold">-</h3>
+        </div>
+        <div class="bg-white p-4 rounded-lg shadow text-center">
+          <p class="text-gray-600">Confidence</p>
+          <h3 id="confidenceLevel" class="text-xl font-bold">-</h3>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Personalized Suggestions</h3>
+        <div id="suggestionsContainer" class="space-y-4"></div>
+      </div>
+
+      <button id="resetBtn" class="w-full mt-8 bg-gray-600 hover:bg-gray-700 text-white py-3 rounded-lg font-medium transition duration-300">
+        <i class="fas fa-redo mr-2"></i> Analyze Another Photo
+      </button>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loadingIndicator" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+      <div class="bg-white p-8 rounded-lg text-center">
+        <i class="fas fa-spinner fa-spin text-3xl text-purple-600 mb-4"></i>
+        <p class="text-gray-800">Analyzing your photo...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const uploadArea = document.getElementById('uploadArea');
+      let imageInput = document.getElementById('imageInput'); // <-- let, so we can rebind after reset
+      const analyzeBtn = document.getElementById('analyzeBtn');
+      const resultsSection = document.getElementById('resultsSection');
+      const loadingIndicator = document.getElementById('loadingIndicator');
+      const resetBtn = document.getElementById('resetBtn');
+
+      let selectedFile = null;
+
+      // Click to open file dialog
+      uploadArea.addEventListener('click', () => imageInput.click());
+
+      // Drag & drop
+      uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('bg-purple-50');
+      });
+      uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('bg-purple-50'));
+      uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('bg-purple-50');
+        if (e.dataTransfer.files.length) handleFileSelect(e.dataTransfer.files[0]);
+      });
+
+      // File choose
+      imageInput.addEventListener('change', (e) => {
+        if (e.target.files.length) handleFileSelect(e.target.files[0]);
+      });
+
+      analyzeBtn.addEventListener('click', () => {
+        if (!selectedFile) { alert('Please select an image first'); return; }
+        analyzeImage(selectedFile);
+      });
+
+      resetBtn.addEventListener('click', () => {
+        resultsSection.classList.add('hidden');
+        selectedFile = null;
+        uploadArea.innerHTML = `
+          <input type="file" id="imageInput" accept="image/*" class="hidden">
+          <div class="py-8">
+            <i class="fas fa-cloud-upload-alt text-4xl text-purple-500 mb-3"></i>
+            <p class="text-gray-600">Click or drag a photo to upload</p>
+            <p class="text-sm text-gray-500 mt-2">Supported formats: JPG, PNG</p>
+          </div>
+        `;
+        imageInput = document.getElementById('imageInput');
+        uploadArea.addEventListener('click', () => imageInput.click());
+        imageInput.addEventListener('change', (e) => {
+          if (e.target.files.length) handleFileSelect(e.target.files[0]);
+        });
+      });
+
+      function handleFileSelect(file) {
+        if (!file.type.match('image.*')) {
+          alert('Please select an image file');
+          return;
+        }
+        selectedFile = file;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          uploadArea.innerHTML = `
+            <img src="${e.target.result}" class="max-h-64 mx-auto rounded-lg shadow-md">
+            <p class="mt-2 text-gray-600">${file.name}</p>
+          `;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function analyzeImage(file) {
+        loadingIndicator.classList.remove('hidden');
+        const formData = new FormData();
+        formData.append('image', file);
+
+        fetch('/predict', { method: 'POST', body: formData })
+          .then(r => r.json())
+          .then(data => {
+            loadingIndicator.classList.add('hidden');
+            if (data.error) { alert('Error: ' + data.error); return; }
+            displayResults(data);
+            resultsSection.classList.remove('hidden');
+          })
+          .catch(err => {
+            loadingIndicator.classList.add('hidden');
+            alert('Error analyzing image: ' + err.message);
+          });
+      }
+
+      function displayResults(data) {
+        document.getElementById('emotionLabel').textContent = data.detected_emotion || 'Unknown';
+
+        const depressionLevel = document.getElementById('depressionLevel');
+        depressionLevel.textContent = data.depression_level || 'Unknown';
+        depressionLevel.classList.remove('level-none','level-mild','level-severe');
+        if (data.depression_level) {
+          const level = data.depression_level.toLowerCase();
+          if (level.includes('none') || level.includes('no')) depressionLevel.classList.add('level-none');
+          else if (level.includes('mild')) depressionLevel.classList.add('level-mild');
+          else if (level.includes('severe')) depressionLevel.classList.add('level-severe');
+        }
+
+        document.getElementById('confidenceLevel').textContent = data.confidence || 'Unknown';
+
+        const suggestionsContainer = document.getElementById('suggestionsContainer');
+        suggestionsContainer.innerHTML = '';
+        if (Array.isArray(data.suggestions) && data.suggestions.length) {
+          data.suggestions.forEach(s => {
+            const el = document.createElement('div');
+            el.className = 'suggestion-card p-4 rounded-lg';
+            el.innerHTML = `
+              <div class="flex items-start">
+                <i class="fas fa-lightbulb text-purple-500 mt-1 mr-3"></i>
+                <p class="text-gray-700">${s}</p>
+              </div>`;
+            suggestionsContainer.appendChild(el);
+          });
+        } else {
+          suggestionsContainer.innerHTML = `
+            <div class="suggestion-card p-4 rounded-lg">
+              <p class="text-gray-700">No specific suggestions available. Consider consulting a mental health professional.</p>
+            </div>`;
+        }
+      }
+    });
+  </script>
+</body>
+</html>
